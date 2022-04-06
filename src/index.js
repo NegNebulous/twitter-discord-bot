@@ -64,7 +64,6 @@ function dRect(scrn, pos, size, c) {
 
 const cv = require('canvas');
 const { createCanvas, loadImage } = require('canvas');
-const { get } = require('request');
 
 //real size of pixel
 const scalef = 1;
@@ -129,7 +128,10 @@ function resizeTo(canvas,pct){
 //ctx.fillRect(0, 0, width, height);
 
 //fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
-try {
+loadImage(img_dir).then(image => {
+    ctx.drawImage(image, 0, 0, width, height);
+})
+/*try {
     if (fs.existsSync(path)) {
         loadImage(img_dir).then(image => {
             ctx.drawImage(image, 0, 0, width, height);
@@ -143,6 +145,11 @@ catch(e) {
     ctx.fillStyle = 'rgb(255,255,255)';
     ctx.fillRect(0, 0, width, height);
 
+    fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
+}*/
+
+//save image
+function saveImg() {
     fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
 }
 
@@ -236,20 +243,32 @@ function sendSelected(message) {
 
     var pos = usrd[message.author.id].show;
     tctx.drawImage(canvas, pos[0]*(width/num_div), pos[1]*(height/num_div), (width/num_div), (height/num_div), 0, 0, width, height);
-    overlay(tctx, temp2);
+    if (userData[message.author.id].gridlines) {
+        overlay(tctx, temp2);
+    }
     resizeTo(temp2, 10);
 
     fs.writeFileSync(img_dir_temp, temp2.toBuffer('image/png'))
-    message.channel.send({files: [{
+    message.reply({files: [{
         attachment: `${img_dir_temp}`
     }]});
 }
 
 function sendFull(message) {
     fs.writeFileSync(img_dir_temp, canvas.toBuffer('image/png'))
-        message.channel.send({files: [{
+        message.reply({files: [{
         attachment: `${img_dir_temp}`
     }]});
+}
+
+function newUser() {
+    //everything after gridlines will show up in options
+    var obj = new Object();
+    obj.dTime = getSeconds();
+    obj.gridlines = true;
+    obj.pingtimer = false;
+
+    return obj;
 }
 
 client.on('messageCreate', (message) => {
@@ -275,6 +294,11 @@ client.on('messageCreate', (message) => {
                 usrd[message.author.id].show = false;
                 //false OR [x,y]
             }
+            if (!userData[message.author.id]) {
+                userData[message.author.id] = newUser();
+                console.log('balls');
+                console.log(newUser());
+            }
 
             console.log("\x1b[32m", `\n${getFormattedDate()}`, "\x1b[0m");
             console.log(message.content);
@@ -297,7 +321,9 @@ client.on('messageCreate', (message) => {
                     var tctx = temp2.getContext('2d');
         
                     resizeTo(temp2, 2);
-                    overlay(tctx, temp2);
+                    if (userData[message.author.id].gridlines) {
+                        overlay(tctx, temp2);
+                    }
         
                     fs.writeFileSync(img_dir_temp, temp2.toBuffer('image/png'))
                     message.channel.send({files: [{
@@ -337,47 +363,56 @@ client.on('messageCreate', (message) => {
                     message.channel.send({embeds: [getEmbed(`Invalid Coordinates. Coordinates must be between 0 and 9.`, 'Draw')]});
                     return;
                 }
-
-                if (!userData[message.author.id]) {
-                    userData[message.author.id] = new Object();
-                    userData[message.author.id].dTime = getSeconds();
+                
+                if (getSeconds() - userData[message.author.id].dTime <= DRAW_DELAY) {
+                    message.channel.send({embeds: [getEmbed(`Try again in ${DRAW_DELAY - (getSeconds() - userData[message.author.id].dTime)} seconds.`, 'Draw')]});
+                    return;
                 }
                 else {
-                    if (getSeconds() - userData[message.author.id].dTime <= DRAW_DELAY) {
-                        message.channel.send({embeds: [getEmbed(`Try again in ${DRAW_DELAY - (getSeconds() - userData[message.author.id].dTime)} seconds.`, 'Draw')]});
-                        return;
-                    }
-                    else {
-                        userData[message.author.id].dTime = getSeconds();
-                    }
+                    userData[message.author.id].dTime = getSeconds();
                 }
 
                 if (Object.keys(dcolors).includes(args[3])) {
 
                     var pos = usrd[message.author.id].show;
-                    console.log(pos);
-                    console.log(pos[0]*(width/num_div));
-                    console.log(pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div));
-                    console.log([pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)]);
                     dPoint(ctx, [pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)], dcolors[args[3]]);
-                    //dRect(ctx, [pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)], [(width/num_div/num_div), (height/num_div/num_div)], dcolors[args[3]]);
-                    //dRect(ctx, [pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)], [25, 25], dcolors[args[3]]);
-                    //console.log(pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div));
-                    //ctx.fillStyle = 'rgb(0,0,0)';
-                    //ctx.fillRect(0, 0, width, height);
                 }
                 else {
                     var pos = usrd[message.author.id].show;
                     dPoint(ctx, [pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)], [args[3], args[4], args[5]]);
-                    //dRect(ctx, [pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)], [(width/num_div), (height/num_div)], [args[3], args[4], args[5]]);
-                    //dRect(ctx, [pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div), pos[1]*(height/num_div)+parseInt(args[2])*(height/num_div/num_div)], [25, 25], dcolors[args[3]]);
-                    //console.log(pos[0]*(width/num_div)+parseInt(args[1])*(width/num_div/num_div));
-                    //ctx.fillStyle = 'rgb(0,0,0)';
-                    //ctx.fillRect(0, 0, width, height);
                 }
 
+                setTimeout(() => {
+                    message.author.send('Your draw timeout has expired.');
+                }, DRAW_DELAY*1000);
+
                 saveData();
+                saveImg();
                 sendSelected(message);
+            }
+            else if (args[0] == 'opt') {
+                if (!args[1]) {
+                    //send message below
+                }
+                else {
+                    var opt = -1;
+                    if (Object.keys(userData[message.author.id]).slice(Object.keys(userData[message.author.id]).includes('gridlines')).includes(args[1])) {
+                        opt = userData[message.author.id][args[1]];
+                    }
+                    if (opt != -1) {
+                        userData[message.author.id][args[1]] = !opt;
+                    }
+                    else {
+                        message.reply({embeds: [getEmbed(`Option not found. Try \`\`${PREFIX} opt\`\` for a list of options.`, 'Options')]});
+                    }
+
+                    saveJson(userDataPath, userData);
+                }
+                var msgsend = ``;
+                for (var i = Object.keys(userData[message.author.id]).indexOf('gridlines'); i < Object.keys(userData[message.author.id]).length;i++) {
+                    msgsend += `${Object.keys(userData[message.author.id])[i]}: \`\`${userData[message.author.id][Object.keys(userData[message.author.id])[i]]}\`\`\n`;
+                }
+                message.reply({ embeds: [getEmbed(msgsend, 'Options')]});
             }
             else if (args[0] == 'help') {
                 if (!args[1]) {
@@ -397,14 +432,23 @@ client.on('messageCreate', (message) => {
                 }
             }
             else if (message.author.id == '203206356402962432') {
-                if (args[0] == 'saveimg') {
-                    fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
-                        message.channel.send({files: [{
-                        attachment: `${img_dir}`
-                    }]});
+                if (args[0] == 'hhelp') {
+                    var msgsend = `Admin commands:\n`;
+                    for (var i = 0; i < Object.keys(commandData.adminCommand).length; i++) {
+                        msgsend += `\n**${commandData.adminCommand[Object.keys(commandData.adminCommand)[i]].name}**\n ${commandData.adminCommand[Object.keys(commandData.adminCommand)[i]].desc}` + '\nSyntax: ' + commandData.adminCommand[Object.keys(commandData.adminCommand)[i]].syntax + '\n';
+                    }
+                    sendEmbed(message.channel, msgsend, 'Commands');
+                }
+                else if (args[0] == 'saveimg') {
+                    saveImg();
+                }
+                else if (args[0] == 'saveudata') {
+                    saveJson(userDataPath, userData);
+                    message.reply('Saved userData.');
                 }
                 else if (args[0] == 'clearudata') {
                     userData = new Object();
+                    message.reply('Cleared userData.');
                 }
             }
         }

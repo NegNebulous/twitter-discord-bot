@@ -29,7 +29,13 @@
         "syntax": "``d x y color``",
         "desc": "Draws a pixel.",
         "example": "``${PREFIX}d 5 5 b``, ``${PREFIX}d 5 5 0 0 255``"
-      }
+      },
+    "opt": {
+      "name": "opt",
+      "syntax": "``opt setting``",
+      "desc": "Returns list of options or changes a specified option.",
+      "example": "``${PREFIX}opt``, ``${PREFIX}opt gridlines``"
+    }
     },
 	"adminCommand": {
 	  "saveimg": {
