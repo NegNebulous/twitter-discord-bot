@@ -14,8 +14,24 @@ const client = new Client({intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_M
 client.login(process.env.DISCORD_BOT_TOKEN);
 client.on('ready', () => {
     console.log(`${client.user.tag} has logged in.`);
-    client.user.setPresence({ activities: [{ name: `${PREFIX}` }], status: 'online' });
+    client.user.setPresence({ activities: [{ name: `${PREFIX} help` }], status: 'online' });
 });
+
+function loadJson(filepath) {
+    try {
+        return JSON.parse(fs.readFileSync(filepath));
+    }catch(e){}
+}
+function saveJson(filepath, obj) {
+    try {
+        fs.writeFile(filepath, JSON.stringify(obj, null, 2), (error) => {
+            console.error(error);
+        });
+    }catch (e) {}
+}
+function saveData() {
+    saveJson(userDataPath, userData)
+}
 
 /* Variables */
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -24,7 +40,16 @@ const img_dir_temp = `${ROOT_DIR}/data/img_TMP.png`;
 var formatedRGB = [0, 75, 255];
 const dcolors = {'r': [255,0,0], 'g':[0,255,0], 'b':[0,0,255]};
 
+const DRAW_DELAY = 5*60;
+
 var usrd = new Object();
+var userDataPath = `${ROOT_DIR}/data/user_data.json`;
+var userData = new Object();
+try {
+    userData = loadJson(userDataPath);
+}catch(e){}
+
+var commandData = JSON.parse((fs.readFileSync(`${ROOT_DIR}/data/command.json`) + '').replaceAll('${PREFIX}', `${PREFIX} `));
 
 /* canvas */
 
@@ -39,9 +64,10 @@ function dRect(scrn, pos, size, c) {
 
 const cv = require('canvas');
 const { createCanvas, loadImage } = require('canvas');
+const { get } = require('request');
 
 //real size of pixel
-const scalef = 10;
+const scalef = 1;
 
 const width = 100*scalef;
 const height = 100*scalef;
@@ -58,12 +84,12 @@ var imgd  = imgdata.data;
 //overlay
 const num_div = 10;
 const overlay_c = [0,0,0];
-function overlay(scrn) {
+function overlay(scrn, can) {
     for (var i = 1;i<num_div;i++) {
-        dRect(scrn, [width/num_div*i, 0], [1, height], overlay_c);
+        dRect(scrn, [can.width/num_div*i, 0], [1, can.height], overlay_c);
     }
     for (var i = 1;i<num_div;i++) {
-        dRect(scrn, [0, height/num_div*i], [width, 1], overlay_c);
+        dRect(scrn, [0, can.height/num_div*i], [can.width, 1], overlay_c);
     }
 }
 
@@ -103,9 +129,27 @@ function resizeTo(canvas,pct){
 //ctx.fillRect(0, 0, width, height);
 
 //fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
-loadImage(img_dir).then(image => {
-    ctx.drawImage(image, 0, 0, width, height);
-})
+try {
+    if (fs.existsSync(path)) {
+        loadImage(img_dir).then(image => {
+            ctx.drawImage(image, 0, 0, width, height);
+        })
+    }
+    else {
+        new Object().balls();
+    }
+}
+catch(e) {
+    ctx.fillStyle = 'rgb(255,255,255)';
+    ctx.fillRect(0, 0, width, height);
+
+    fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
+}
+
+//returns time accurate to second
+function getSeconds() {
+    return Math.floor(new Date() / 1000)
+}
 
 //Returns formatted date
 function getFormattedDate() {
@@ -139,9 +183,9 @@ var sendEmbed = async function(channel, message, title, comp){
 }
 
 //returns a new embed
-var getEmbed = function(message, title, comp){
+var getEmbed = function(description, title, comp){
     let richEmbed = new MessageEmbed();
-    richEmbed.setDescription(message);
+    richEmbed.setDescription(description);
     richEmbed.setColor(formatedRGB);
     if (comp) {
         richEmbed.setTitle(title);
@@ -192,7 +236,7 @@ function sendSelected(message) {
 
     var pos = usrd[message.author.id].show;
     tctx.drawImage(canvas, pos[0]*(width/num_div), pos[1]*(height/num_div), (width/num_div), (height/num_div), 0, 0, width, height);
-    overlay(tctx);
+    overlay(tctx, temp2);
     resizeTo(temp2, 10);
 
     fs.writeFileSync(img_dir_temp, temp2.toBuffer('image/png'))
@@ -208,7 +252,7 @@ function sendFull(message) {
     }]});
 }
 
-client.on('messageCreate', async (message) => {
+client.on('messageCreate', (message) => {
 
     if (message.author.bot) {
         return;
@@ -239,6 +283,9 @@ client.on('messageCreate', async (message) => {
             args.splice(0,1);
             console.log(args);
             console.log(usrd[message.author.id])
+            if (userData[message.author.id]) {
+                console.log(userData[message.author.id]);
+            }
     
             if (args.length == 0) {
                 if (usrd[message.author.id].show) {
@@ -249,8 +296,8 @@ client.on('messageCreate', async (message) => {
                     var temp2 = cloneCanv(canvas);
                     var tctx = temp2.getContext('2d');
         
-                    overlay(tctx);
                     resizeTo(temp2, 2);
+                    overlay(tctx, temp2);
         
                     fs.writeFileSync(img_dir_temp, temp2.toBuffer('image/png'))
                     message.channel.send({files: [{
@@ -266,6 +313,9 @@ client.on('messageCreate', async (message) => {
                 sendFull(message);
             }
             else if (args[0] == 's') {
+                if (!args[1] || !args[2]) {
+                    return;
+                }
                 if (parseInt(args[1]) < 0 || parseInt(args[1]) >= num_div) {
                     return;
                 }
@@ -278,11 +328,28 @@ client.on('messageCreate', async (message) => {
                 sendSelected(message);
             }
             else if (args[0] == 'd') {
-                if (parseInt(args[1]) < 0 || parseInt(args[1]) >= num_div) {
+                if (!usrd[message.author.id].show) {
+                    message.channel.send({embeds: [getEmbed(`No image section selected. Try \`\`${PREFIX} s X Y\`\``, 'Draw')]});
                     return;
                 }
-                else if (parseInt(args[2]) < 0 || parseInt(args[2]) >= num_div) {
+
+                if ((parseInt(args[1]) < 0 || parseInt(args[1]) >= num_div) || (parseInt(args[2]) < 0 || parseInt(args[2]) >= num_div)) {
+                    message.channel.send({embeds: [getEmbed(`Invalid Coordinates. Coordinates must be between 0 and 9.`, 'Draw')]});
                     return;
+                }
+
+                if (!userData[message.author.id]) {
+                    userData[message.author.id] = new Object();
+                    userData[message.author.id].dTime = getSeconds();
+                }
+                else {
+                    if (getSeconds() - userData[message.author.id].dTime <= DRAW_DELAY) {
+                        message.channel.send({embeds: [getEmbed(`Try again in ${DRAW_DELAY - (getSeconds() - userData[message.author.id].dTime)} seconds.`, 'Draw')]});
+                        return;
+                    }
+                    else {
+                        userData[message.author.id].dTime = getSeconds();
+                    }
                 }
 
                 if (Object.keys(dcolors).includes(args[3])) {
@@ -309,14 +376,35 @@ client.on('messageCreate', async (message) => {
                     //ctx.fillRect(0, 0, width, height);
                 }
 
+                saveData();
                 sendSelected(message);
             }
+            else if (args[0] == 'help') {
+                if (!args[1]) {
+                    var msgsend = `For more detailed information on any commands type\n\`\`\`${PREFIX} help command name\`\`\`\n`;
+                    for (var i = 0; i < Object.keys(commandData.command).length; i++) {
+                        msgsend += `\n**${commandData.command[Object.keys(commandData.command)[i]].name}**\n ${commandData.command[Object.keys(commandData.command)[i]].desc}\n__Examples:__ ${commandData.command[Object.keys(commandData.command)[i]].example}\n`;
+                    }
+                    sendEmbed(message.channel, msgsend, 'Commands');
+                }
+                else {
+                    for (var i = 0; i < Object.keys(commandData.command).length; i++) {
+                        if (commandData.command[Object.keys(commandData.command)[i]].name == args[1]) {
+                            var msgsend = ('\n' + commandData.command[Object.keys(commandData.command)[i]].desc +  '\n\nSyntax: ' + commandData.command[Object.keys(commandData.command)[i]].syntax + '\n\nExample: ' + commandData.command[Object.keys(commandData.command)[i]].example);
+                            sendEmbed(message.channel, msgsend, commandData.command[Object.keys(commandData.command)[i]].name);
+                        }
+                    }
+                }
+            }
             else if (message.author.id == '203206356402962432') {
-                if (args[0] == 'save') {
+                if (args[0] == 'saveimg') {
                     fs.writeFileSync(img_dir, canvas.toBuffer('image/png'))
                         message.channel.send({files: [{
                         attachment: `${img_dir}`
                     }]});
+                }
+                else if (args[0] == 'clearudata') {
+                    userData = new Object();
                 }
             }
         }
