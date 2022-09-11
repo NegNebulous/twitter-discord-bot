@@ -7,15 +7,34 @@ const fs = require('fs');
 const path = require('path');
 const deepcopy = require('deepcopy');
 
+//discord client setup
 const { Client, Intents, MessageEmbed } = require('discord.js');
 console.log(`Discord v${require('discord.js').version}`);
-const client = new Client({intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.GUILD_MEMBERS]});
+const client = new Client({intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.GUILD_MEMBERS, Intents.FLAGS.GUILD_PRESENCES, Intents.FLAGS.GUILD_VOICE_STATES]});
 
 client.login(process.env.DISCORD_BOT_TOKEN);
 client.on('ready', () => {
-    console.log(`${client.user.tag} has logged in.`);
+    console.log(`\n${client.user.tag} has logged in.`);
     client.user.setPresence({ activities: [{ name: `${PREFIX} help` }], status: 'online' });
 });
+/*
+//twitter client setup
+const { TwitterApi } = require('twitter-api-v2');
+console.log(`twitter-api-v2 v${ require('twitter-api-v2').version}`);
+const twitterClient = new TwitterApi(`${process.env.TWITTER_BEARER_TOKEN}`);*/
+
+const { QueryType } = require("discord-player")
+
+const { Player } = require("discord-player")
+
+const musicData = {};
+
+const player = new Player(client, {
+  ytdlOptions: {
+    quality: "highestaudio",
+    highWaterMark: 1 << 25
+  }
+})
 
 function loadJson(filepath) {
     try {
@@ -271,6 +290,84 @@ function newUser() {
     return obj;
 }
 
+// currently only one server can listen to a user at a time
+client.on('presenceUpdate', async (oldP, newP) => {
+    // console.log(newP)
+    // console.log('presence');
+    for (var i = 0; i < newP.activities.length;i++) {
+        if (newP.activities[i].type == 'LISTENING') {
+            // console.log('listen');
+
+            // this should then call an async function so that each thing doesn't slow down the rest
+            (async () => {
+                if (!musicData[newP.userId]) return;
+                // console.log('by user');
+
+                const message = musicData[newP.userId].message;
+                
+                const p = newP.activities[i];
+                
+                const result = await player.search(`${p.details} by ${p.state} lyrical version`, {
+                    searchEngine: QueryType.YOUTUBE_SEARCH
+                })
+                
+                // musicData[newP.userId]
+                // console.log(result.tracks[0]);
+
+                // console.log(`${musicData[newP.userId].last} == ${result.tracks[0].thumbnail}`);
+                if (musicData[newP.userId].last == result.tracks[0].thumbnail) return;
+
+                console.log(`Playing: ${p.details} by ${p.state}`);
+                // 72 drop for funny song
+
+                // console.log('new song');
+
+
+                musicData[newP.userId].last = result.tracks[0].thumbnail;
+
+                if (!musicData[newP.userId].queue) {
+                    console.log('new queue');
+                    // musicData[newP.userId].queue.clear();
+                    // musicData[newP.userId].queue.destroy();
+                    musicData[newP.userId].queue = player.createQueue(message.guild, {
+                        metamusicData: {
+                            channel: musicData[newP.userId].channel
+                        }
+                    });
+                }
+
+                const queue = musicData[newP.userId].queue;
+
+                queue.setPaused(true);
+            
+                await queue.addTrack(result.tracks[0]);
+
+                // console.log(queue.tracks);
+                if (queue.tracks.length > 1) {
+                    // queue.skip();
+                    // queue.remove(queue.tracks[queue.tracks.length - 1]);
+                    queue.remove(queue.tracks[0]);
+                    console.log('removed 1 song from track');
+                }
+            
+                try {
+                    await queue.connect(musicData[newP.userId].channel);
+                } catch(e) {}
+
+                console.log(queue.tracks);
+
+                // set volume requires some missing library
+                // console.log(queue.setVolume(0.5));
+            
+                // queue.play();
+                queue.setPaused(false);
+                if (!queue.playing) queue.play();
+                // console.log(queue.playing);
+            })();
+        }
+    }
+});
+
 client.on('messageCreate', (message) => {
 
     if (message.author.bot) {
@@ -279,7 +376,7 @@ client.on('messageCreate', (message) => {
 
     try {
         var link = 'https://twitter.com';
-        var rep = 'https://fxtwitter.com';
+        var rep = 'https://vxtwitter.com';
         if (message.content.startsWith(link)) {
 
             console.log("\x1b[32m", `\n${getFormattedDate()}`, "\x1b[0m");
@@ -296,7 +393,6 @@ client.on('messageCreate', (message) => {
             }
             if (!userData[message.author.id]) {
                 userData[message.author.id] = newUser();
-                console.log('balls');
                 console.log(newUser());
             }
 
@@ -312,6 +408,9 @@ client.on('messageCreate', (message) => {
             }
     
             if (args.length == 0) {
+                if (message.content.length != PREFIX.length) {
+                    return;
+                }
                 if (usrd[message.author.id].show) {
                     //copy pasted to s
                     sendSelected(message);
@@ -431,6 +530,37 @@ client.on('messageCreate', (message) => {
                     }
                 }
             }
+            else if (args[0] == 'share') {
+                if (!args[1]) return;
+
+                const id = getIdFromMsg(args[1]);
+
+                musicData[id] = {
+                    message: message,
+                    channel: message.member.voice.channel
+                };
+
+                const member = message.guild.members.cache.get(id);
+
+                message.reply({embeds: [getEmbed(
+                    `Now sharing ${member.user.username}'s music. If you are the host it is recomended that you mute your music player. Once the host begins listening to a new song I will connect and start playing it.`,
+                    `Share`
+                )]});
+            }
+            else if (args[1] == 'clear') {
+                if (!message.member.hasPermission("ADMINISTRATOR")) {
+                    message.reply('You must have admin permissions for this command.');
+                }
+                else {
+                    for (let i = 0; i < Object.keys(musicData);i++) {
+                        if (musicData[Object.keys(musicData)[i]].queue) {
+                            musicData[Object.keys(musicData)[i]].queue.destroy();
+                        }
+                    }
+                    musicData = {};
+                    console.log(musicData);
+                }
+            }
             else if (message.author.id == '203206356402962432') {
                 if (args[0] == 'hhelp') {
                     var msgsend = `Admin commands:\n`;
@@ -450,6 +580,14 @@ client.on('messageCreate', (message) => {
                     userData = new Object();
                     message.reply('Cleared userData.');
                 }
+                /*else if (args[0] == 'tweet') {
+                    msgsend = 'test';
+                    var url = `https://api.twitter.com/1.1/statuses/update.json?status=${msgsend}`;
+                    twitterClient.v2.post(url).then((tweet) => {
+                        message.channel.reply('Tweeted.');
+                    });
+
+                }*/
             }
         }
     }

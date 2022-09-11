@@ -1,23 +1,23 @@
 {
-    "command": {
-      "default": {
-        "name": "default",
-        "syntax": "``${PREFIX}``",
-        "desc": "Displays current selection.",
-        "example": "``${PREFIX}``"
-      },
-      "help": {
-        "name": "help",
-        "syntax": "``help command``",
-        "desc": "Returns list of commands or info on a specific command.",
-        "example": "``${PREFIX}help``, ``${PREFIX}help s``"
-      },
-      "s": {
-        "name": "s",
-        "syntax": "``s x y``",
-        "desc": "Selects a section of the image (x 0-9, y 0-9).",
-        "example": "``${PREFIX}s 5 5``"
-      },
+  "command": {
+    "default": {
+      "name": "default",
+      "syntax": "``${PREFIX}``",
+      "desc": "Displays current selection.",
+      "example": "``${PREFIX}``"
+    },
+    "help": {
+      "name": "help",
+      "syntax": "``help command``",
+      "desc": "Returns list of commands or info on a specific command.",
+      "example": "``${PREFIX}help``, ``${PREFIX}help s``"
+    },
+    "s": {
+      "name": "s",
+      "syntax": "``s x y``",
+      "desc": "Selects a section of the image (x 0-9, y 0-9).",
+      "example": "``${PREFIX}s 5 5``"
+    },
 	  "o": {
         "name": "o",
         "syntax": "``o``",
@@ -35,8 +35,14 @@
       "syntax": "``opt setting``",
       "desc": "Returns list of options or changes a specified option.",
       "example": "``${PREFIX}opt``, ``${PREFIX}opt gridlines``"
-    }
     },
+    "share": {
+      "name": "share",
+      "syntax": "``share @user``",
+      "desc": "Plays the mentioned users spoitify music in the current voive channel.",
+      "example": "``${PREFIX}share <@955169878736769075>``"
+    }
+  },
 	"adminCommand": {
 	  "saveimg": {
         "name": "saveimg",
