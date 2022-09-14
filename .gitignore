@@ -9,3 +9,5 @@ run.bat
 .txt
 
 data/.png
+
+package-lock.json

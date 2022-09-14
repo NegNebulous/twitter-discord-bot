@@ -40,7 +40,25 @@
       "name": "share",
       "syntax": "``share @user``",
       "desc": "Plays the mentioned users spoitify music in the current voive channel.",
-      "example": "``${PREFIX}share <@955169878736769075>``"
+      "example": "``${PREFIX}share @twitter_bad``"
+    },
+    "play": {
+      "name": "play",
+      "syntax": "``play song title``",
+      "desc": "Plays the specified song in the current voive channel.",
+      "example": "``${PREFIX}play wishing well juice wrld``"
+    },
+    "skip": {
+      "name": "skip",
+      "syntax": "``skip``",
+      "desc": "skips the current song.",
+      "example": "``${PREFIX}skip``"
+    },
+    "clear": {
+      "name": "clear",
+      "syntax": "``clear``",
+      "desc": "clears the current queue.",
+      "example": "``${PREFIX}clear``"
     }
   },
 	"adminCommand": {
