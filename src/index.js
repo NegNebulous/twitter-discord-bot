@@ -5,7 +5,7 @@ const PREFIX = '!t';
 
 const fs = require('fs');
 const path = require('path');
-const deepcopy = require('deepcopy');
+// const deepcopy = require('deepcopy');
 
 //discord client setup
 const { Client, Intents, MessageEmbed } = require('discord.js');
@@ -16,6 +16,8 @@ client.login(process.env.DISCORD_BOT_TOKEN);
 client.on('ready', () => {
     console.log(`\n${client.user.tag} has logged in.`);
     client.user.setPresence({ activities: [{ name: `${PREFIX} help` }], status: 'online' });
+
+    console.log('add all users to temp hours object');
 });
 /*
 //twitter client setup
@@ -100,17 +102,26 @@ function createQueue(obj) {
 function loadJson(filepath) {
     try {
         return JSON.parse(fs.readFileSync(filepath));
-    }catch(e){}
+    }catch(e){console.error(e)}
 }
-function saveJson(filepath, obj) {
+function saveJson(filepath, obj, sync) {
+    if (sync==null) sync = false;
     try {
-        fs.writeFile(filepath, JSON.stringify(obj, null, 2), (error) => {
-            console.error(error);
-        });
+        if (sync) {
+            fs.writeFileSync(filepath, JSON.stringify(obj, null, 2), (error) => {
+                console.error(error);
+            });
+        }
+        else {
+            fs.writeFile(filepath, JSON.stringify(obj, null, 2), (error) => {
+                console.error(error);
+            });
+        }
     }catch (e) {}
 }
-function saveData() {
-    saveJson(userDataPath, userData)
+
+function saveData(sync) {
+    saveJson(userDataPath, userData, sync)
 }
 
 /* Variables */
@@ -121,13 +132,15 @@ var formatedRGB = [0, 75, 255];
 const dcolors = {'r': [255,0,0], 'g':[0,255,0], 'b':[0,0,255]};
 
 const DRAW_DELAY = 5*60;
+const STARTTIME = Math.floor(new Date() / 1000);
 
 var usrd = new Object();
 var userDataPath = `${ROOT_DIR}/data/user_data.json`;
 var userData = new Object();
 try {
     userData = loadJson(userDataPath);
-}catch(e){}
+    console.log(userData);
+}catch(e){console.error(e)}
 
 var commandData = JSON.parse((fs.readFileSync(`${ROOT_DIR}/data/command.json`) + '').replaceAll('${PREFIX}', `${PREFIX} `));
 
@@ -350,6 +363,127 @@ function newUser() {
 
     return obj;
 }
+
+function timeConvert(time, unit, asString) {
+    if (unit==null) unit='seconds';
+    let units = {
+        'minutes': 60,
+        'hours': 60*60,
+        'days': 60*60*24,
+        // 'weeks': 60*60*24*7,
+        // 'years': 60*60*24*7*365,
+        'inf': Infinity
+    }
+    if (time > 60) {
+        for (let i = 0; i < Object.keys(units).length; i++) {
+            let k = Object.keys(units);
+            if (time > units[k[i]] && time < units[k[i+1]]) {
+                unit = k[i];
+                time = time / units[k[i]];
+                break;
+            }
+        }
+    }
+
+    if (asString) {
+        return `${parseFloat(time).toFixed(2)} ${unit}`;
+    }
+    return {
+        "time": time,
+        "unit": unit
+    };
+}
+
+function exitHandler(eventType, a, b, c) {
+    console.log(`exitcode: ${eventType}`);
+    console.log(a)
+    console.log(b)
+    console.log(c)
+    console.log(userData);
+
+    let count = 0;
+
+    for (server in hourData) {
+        for (user in hourData[server]) {
+            try {
+                if (hourData[server][user]) {
+                    if (getSeconds() - hourData[serverid][userid] > 0) {
+                        userData.hours[serverid][userid] += getSeconds() - hourData[serverid][userid];
+                    }
+                    // delete hourData[serverid][userid]; // just in case this runs multiple times somehow
+                    // console.log('added');
+                    count += 1;
+                }
+            }
+            catch(error) {}
+        }
+    }
+
+    console.log(`Saved ${count} user('s) data.`)
+
+
+
+    if (userData) {
+        saveData(true);
+    }
+
+    // let start = getSeconds();
+
+    // // wait for 1 second
+    // while (getSeconds() - start < 1) {
+
+    // }
+
+    process.exitCode = 0;
+    process.exit(0);
+}
+
+// `exit`, 
+[`uncaughtException`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `SIGTERM`].forEach((eventType) => {
+    process.on(eventType, exitHandler);
+});
+
+// temp data
+hourData = {}
+//userData.hours
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+
+    //add checks for mute/deafen
+
+    try {
+        //connected
+        if (!oldState.channelId && newState.channelId) {
+            userid = newState.member.user.id;
+            serverid = newState.guild.id;
+    
+            console.log(`${userid} connected to ${serverid}`);
+    
+            if (!hourData[serverid]) hourData[serverid] = {};
+            hourData[serverid][userid] = getSeconds();
+        }
+        //disconnected
+        else if (oldState.channelId && !newState.channelId) {
+            userid = newState.member.user.id;
+            serverid = oldState.guild.id;
+    
+            console.log(`${userid} disconnected from ${serverid}`);
+    
+            if (!userData.hours[serverid]) userData.hours[serverid] = {};
+            if (!userData.hours[serverid][userid]) userData.hours[serverid][userid] = 0;
+            if (!hourData[serverid]) hourData[serverid] = {};
+            if (!hourData[serverid][userid]) hourData[serverid][userid] = STARTTIME;
+            userData.hours[serverid][userid] += getSeconds() - hourData[serverid][userid];
+            delete hourData[serverid][userid];
+        }
+        
+        saveData();
+    }
+    catch(error) {
+        console.error(error);
+    }
+
+});
 
 // currently only one server can listen to a user at a time
 client.on('presenceUpdate', async (oldP, newP) => {
@@ -719,7 +853,7 @@ client.on('messageCreate', (message) => {
             
             const queue = musicData.server[message.guild.id].queue;
             // const cur_song = queue.nowPlaying(); // this line errors randomly for no reason
-            cur_song;
+            let cur_song;
             try {
                 cur_song = queue.nowPlaying();
             } catch(e) {}
@@ -735,16 +869,65 @@ client.on('messageCreate', (message) => {
             }
             const tracks = queue.tracks;
 
-            song_str += cur_song.title + '\n';
+            song_str += `[${cur_song.title}](${cur_song.url})` + '\n';
             song_str += `${queue.getPlayerTimestamp().current} - ` + cur_song.duration + '\n';
 
             if (tracks.length > 0) song_str += '\n**Next**';
 
             for (let i = 0; i < tracks.length; i++) {
-                song_str += `\n${i+1}. ${tracks[i].title}`;
+                song_str += `\n${i+1}. [${tracks[i].title}](${tracks[i].url})`;
             }
 
-            message.reply({embeds: [getEmbed(song_str, 'Queue').setThumbnail(cur_song.thumbnail)]});
+            message.reply( {embeds: [
+                getEmbed(song_str, 'Queue')
+                  .setThumbnail(cur_song.thumbnail)
+            ]} );
+        }
+        else if (args[0] == 'time') {
+            let target = message.author.id;
+            if (args[1]) {
+                target = getIdFromMsg(args[1]);
+            }
+            try {
+                let result = timeConvert(userData.hours[message.guildId][target], 'seconds');
+                let time = result.time;
+                let unit = result.unit;
+
+                message.reply(`<@${target}> has been in call for ${parseFloat(time).toFixed(2)} ${unit} in total.`);
+            }
+            catch {
+                message.reply(`Targeted user never been in call.`);
+            }
+        }
+        else if (args[0] == 'lb' || args[0] == 'leaderboard') {
+            let unordered = userData.hours[message.guild.id];
+            console.log(unordered);
+            let sorted = Object.keys(unordered).sort((function(valuea, valueb) {
+                if (unordered[valuea] > unordered[valueb]) {
+                    return -1;
+                }
+                else {
+                    return 1;
+                }
+            })).reduce((obj, key) => { 
+                    obj[key] = unordered[key]; 
+                    return obj;
+                },
+                {}
+            );
+
+            let finalMsg = `#1${" \u200b".repeat(3)}${message.guild.members.cache.get(Object.keys(sorted)[0]).user.username}: ${timeConvert(sorted[Object.keys(sorted)[0]], null, true)}\n`;
+            // finalMsg += `#${i+1}${((i < 9) ? " \u200b".repeat(2) : ' ')} ${message.guild.members.cache.get(Object.keys(sorted)[i])}: ${sorted[Object.keys(sorted)[i]]}\n`;
+            // let finalMsg = '';
+
+            for (var i = 1; i < (Object.keys(sorted).length < 10 ? Object.keys(sorted).length : 10); i++) {
+                try {
+                    finalMsg += `#${i+1}${((i < 9) ? " \u200b".repeat(2) : ' ')} ${message.guild.members.cache.get(Object.keys(sorted)[i]).user.username}: ${timeConvert(sorted[Object.keys(sorted)[i]], null, true)}\n`;
+                }
+                catch(e){}
+            }
+
+            message.reply({embeds: [getEmbed(finalMsg, `Leader Board`)]});
         }
         else if (message.author.id == '203206356402962432') {
             if (args[0] == 'hhelp') {
@@ -779,6 +962,12 @@ client.on('messageCreate', (message) => {
                     console.log(musicData);
                     message.reply('Cleared');
                 }
+            }
+            else if (args[0] == 'search') {
+                const channel_id = '920740085736046702';
+                const channel = message.guild.channels.fetch(channel_id);
+
+                console.log(channel);
             }
             /*else if (args[0] == 'tweet') {
                 msgsend = 'test';

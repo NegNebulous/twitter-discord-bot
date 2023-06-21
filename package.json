@@ -23,6 +23,7 @@
     "dotenv": "^16.0.0",
     "edit-json-file": "^1.6.2",
     "request": "^2.88.2",
-    "twitter-api-v2": "^1.11.2"
+    "twitter-api-v2": "^1.11.2",
+    "ytdl-core": "^4.11.4"
   }
 }
