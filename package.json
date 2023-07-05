@@ -14,12 +14,13 @@
     "node": "^16.13.0"
   },
   "dependencies": {
-    "@discordjs/opus": "^0.8.0",
-    "@discordjs/voice": "^0.8.0",
+    "@discordjs/opus": "^0.9.0",
+    "@discordjs/voice": "^0.16.0",
     "canvas": "^2.9.1",
     "deepcopy": "^2.1.0",
-    "discord-player": "^5.2.2",
-    "discord.js": "^13.6.0",
+    "discord-player": "^6.5.0",
+    "discord-voice": "^2.0.6",
+    "discord.js": "^14.11.0",
     "dotenv": "^16.0.0",
     "edit-json-file": "^1.6.2",
     "request": "^2.88.2",

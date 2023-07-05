@@ -8,9 +8,10 @@ const path = require('path');
 // const deepcopy = require('deepcopy');
 
 //discord client setup
-const { Client, Intents, MessageEmbed } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActivityType } = require('discord.js');
 console.log(`Discord v${require('discord.js').version}`);
-const client = new Client({intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_EMOJIS_AND_STICKERS, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.GUILD_MEMBERS, Intents.FLAGS.GUILD_PRESENCES, Intents.FLAGS.GUILD_VOICE_STATES]});
+const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildEmojisAndStickers, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.MessageContent]});
+// const client = new Client();
 
 client.login(process.env.DISCORD_BOT_TOKEN);
 client.on('ready', () => {
@@ -25,9 +26,10 @@ const { TwitterApi } = require('twitter-api-v2');
 console.log(`twitter-api-v2 v${ require('twitter-api-v2').version}`);
 const twitterClient = new TwitterApi(`${process.env.TWITTER_BEARER_TOKEN}`);*/
 
-const { QueryType } = require("discord-player")
-
-const { Player } = require("discord-player")
+// https://discord-player.js.org/docs/guides/common-actions#stopping-the-queue
+// https://github.com/Androz2091/discord-player/blob/cd5cf97/packages/discord-player/src/manager/GuildQueue.ts#L608
+const { QueryType, Player, Util } = require("discord-player");
+const {YouTubeExtractor} = require('@discord-player/extractor');
 
 const musicData = {
     user: {},  // data by user, user to servers
@@ -39,7 +41,14 @@ const player = new Player(client, {
     quality: "highestaudio",
     highWaterMark: 1 << 25
   }
-})
+});
+
+player.extractors.register(YouTubeExtractor, {
+    ytdlOptions: {
+        quality: "highestaudio",
+        highWaterMark: 1 << 25
+    }
+});
 
 Array.prototype.remove = function() {
     var what, a = arguments, L = a.length, ax;
@@ -75,14 +84,19 @@ function createQueue(obj) {
     
     if (!queue) {
         console.log('new queue');
-        queue = player.createQueue(message.guild, {
+        queue = player.nodes.create(message.guild, {
             metamusicData: {
                 channel: message.member.voice.channel
             },
             leaveOnEmpty: false,
+            // leaveOnEmptyCooldown: 300000, // 5 minutes
             leaveOnEnd: false,
-            leaveOnStop: false
+            // leaveOnEndCooldown: 300000, // 5 minutes
+            leaveOnStop: false,
+            volume: 3
         })
+
+        // console.log(queue.node.setVolume(1));
     }
 
     musicData.server[message.guild.id] = {
@@ -128,7 +142,8 @@ function saveData(sync) {
 const ROOT_DIR = path.resolve(__dirname, '..');
 const img_dir = `${ROOT_DIR}/data/img.png`;
 const img_dir_temp = `${ROOT_DIR}/data/img_TMP.png`;
-var formatedRGB = [0, 75, 255];
+// var formatedRGB = [0, 75, 255];
+var formatedRGB = [155, 0, 25];
 const dcolors = {'r': [255,0,0], 'g':[0,255,0], 'b':[0,0,255]};
 
 const DRAW_DELAY = 5*60;
@@ -284,7 +299,7 @@ var sendEmbed = async function(channel, message, title, comp){
 
 //returns a new embed
 var getEmbed = function(description, title, comp){
-    let richEmbed = new MessageEmbed();
+    let richEmbed = new EmbedBuilder();
     richEmbed.setDescription(description);
     richEmbed.setColor(formatedRGB);
     if (comp) {
@@ -488,7 +503,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 // currently only one server can listen to a user at a time
 client.on('presenceUpdate', async (oldP, newP) => {
     for (var i = 0; i < newP.activities.length;i++) {
-        if (newP.activities[i].type == 'LISTENING') {
+        if (newP.activities[i].type == ActivityType.Listening) {
 
             (async () => {
                 if (!musicData.user[newP.userId]) return;
@@ -498,6 +513,11 @@ client.on('presenceUpdate', async (oldP, newP) => {
                 const result = await player.search(`${p.details} by ${p.state} lyrical version`, {
                     searchEngine: QueryType.YOUTUBE_SEARCH
                 })
+
+                if (result.tracks.length == 0) {
+                    console.log("No results");
+                    return;
+                }
                 
                 if (musicData.user[newP.userId].last == result.tracks[0].thumbnail) return;
 
@@ -505,51 +525,21 @@ client.on('presenceUpdate', async (oldP, newP) => {
                 // 72 drop for funny song
 
                 musicData.user[newP.userId].last = result.tracks[0].thumbnail;
-
-                musicData.user[newP.userId].servers.forEach(async guild_player => {
-
-                    const message = guild_player.message;
-
-                    // if (!guild_player.queue) {
-                    //     // guild_player.queue.clear();
-                    //     // guild_player.queue.destroy();
-                    //     guild_player.queue = player.createQueue(message.guild, {
-                    //         metamusicData: {
-                    //             channel: guild_player.channel
-                    //         }
-                    //     });
-                    // }
-    
-                    const queue = guild_player.queue;
-    
-                    // queue.setPaused(true);
                 
-                    try {
-                        if (queue.nowPlaying())
-                            await queue.skip();
-                    } catch(e) {}
+                musicData.user[newP.userId].servers.forEach(async guild_player => {
+                    const queue = guild_player.queue;
 
                     await queue.clear();
+                    if (queue.node.isPlaying())
+                        await queue.node.skip();
+
                     await queue.addTrack(result.tracks[0]);
-    
-                    if (queue.tracks.length > 1) {
-                        // queue.skip();
-                        // queue.remove(queue.tracks[queue.tracks.length - 1]);
-                        queue.remove(queue.tracks[0]);
-                        // console.log('removed 1 song from track');
-                    }
-                
+                    
                     if (!queue.connection)
                         await queue.connect(guild_player.channel);
-    
-    
-                    // set volume requires some missing library
-                    // queue.setVolume(0.5);
-                
-                    // queue.play();
-                    // queue.setPaused(false);
-                    if (!queue.playing) queue.play();
 
+                    if (!queue.node.isPlaying())
+                        queue.node.play(result.tracks[0]);
                 });
             })();
         }
@@ -822,26 +812,39 @@ client.on('messageCreate', (message) => {
                     searchEngine: QueryType.YOUTUBE_SEARCH
                 });
 
+                if (result.tracks.length == 0) {
+                    message.reply("No results");
+                    return;
+                }
+
                 await queue.addTrack(result.tracks[0]);
                 // await queue.insert(result.tracks[0], 0);
 
                 if (!queue.connection) await queue.connect(splayer.channel);
 
                 // if (!queue.paused) queue.setPaused(false);
-                if (!queue.playing) queue.play();
+                // if (!queue.node.playing) queue.play();
+                // console.log(queue.node.playing);
+
+                if (!queue.node.isPlaying())
+                    queue.node.play();
 
                 // console.log(result.tracks[0]);
                 message.reply(`Added **"${result.tracks[0].title}"** to the queue`);
             })();
         }
+        else if (args[0] == 'remove') {
+            // TODO write this command
+        }
         else if (args[0] == 'skip') {
-            if (!message.member.permissions.has("ADMINISTRATOR")) {
-                message.reply('You must have admin permissions for this command.');
-            }
+            // TODO fix
+            // if (!message.member.permissions.has("ADMINISTRATOR")) {
+            //     message.reply('You must have admin permissions for this command.');
+            // }
             if (!musicData.server[message.guild.id]) return;
             if (!musicData.server[message.guild.id].queue) return;
 
-            musicData.server[message.guild.id].queue.skip();
+            musicData.server[message.guild.id].queue.node.skip();
         }
         else if (args[0] == 'queue' || args[0] == 'q') {
 
@@ -853,9 +856,12 @@ client.on('messageCreate', (message) => {
             
             const queue = musicData.server[message.guild.id].queue;
             // const cur_song = queue.nowPlaying(); // this line errors randomly for no reason
+
+            // console.log(queue.tracks);
+
             let cur_song;
             try {
-                cur_song = queue.nowPlaying();
+                cur_song = queue.currentTrack;
             } catch(e) {}
 
             if (!queue) {exit();return;}
@@ -867,10 +873,10 @@ client.on('messageCreate', (message) => {
             else {
                 song_str = `**Currently Playing ${message.guild.members.cache.get(musicData.server[message.guild.id].user.id).user.username}'s music**\n`;
             }
-            const tracks = queue.tracks;
+            const tracks = queue.tracks.data;
 
             song_str += `[${cur_song.title}](${cur_song.url})` + '\n';
-            song_str += `${queue.getPlayerTimestamp().current} - ` + cur_song.duration + '\n';
+            song_str += `${Util.buildTimeCode(Util.parseMS(queue.node.estimatedPlaybackTime))} - ` + cur_song.duration + '\n';
 
             if (tracks.length > 0) song_str += '\n**Next**';
 
