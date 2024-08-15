@@ -19,6 +19,15 @@ client.on('ready', () => {
     client.user.setPresence({ activities: [{ name: `${PREFIX} help` }], status: 'online' });
 
     console.log('add all users to temp hours object');
+
+    try {
+        client.channels.cache.get('1165348331128627240').send({files: [{
+            attachment: `${userDataPath}`,
+            name: 'user_data.json'
+        }]});
+    } catch (e) {
+        console.error(e);
+    }
 });
 /*
 //twitter client setup
@@ -36,18 +45,17 @@ const musicData = {
     server: {} // data by server, server to musicPlayer
 };
 
-const player = new Player(client, {
-  ytdlOptions: {
+const YTDL_OPTS = {
     quality: "highestaudio",
     highWaterMark: 1 << 25
-  }
+};
+
+const player = new Player(client, {
+    ytdlOptions: YTDL_OPTS
 });
 
 player.extractors.register(YouTubeExtractor, {
-    ytdlOptions: {
-        quality: "highestaudio",
-        highWaterMark: 1 << 25
-    }
+    ytdlOptions: YTDL_OPTS
 });
 
 Array.prototype.remove = function() {
@@ -159,6 +167,11 @@ try {
 
 var commandData = JSON.parse((fs.readFileSync(`${ROOT_DIR}/data/command.json`) + '').replaceAll('${PREFIX}', `${PREFIX} `));
 
+var SecretSantaPairings = {};
+var SecretSantaData = {};
+var SantaPath = `${ROOT_DIR}/data/csv/Secret Santa  (Responses) - Form Responses 1.csv`;
+// var SantaPath = `${ROOT_DIR}/data/csv/test_data.csv`;
+
 /* canvas */
 
 function dRect(scrn, pos, size, c) {
@@ -172,6 +185,7 @@ function dRect(scrn, pos, size, c) {
 
 const cv = require('canvas');
 const { createCanvas, loadImage } = require('canvas');
+const ytdl = require('ytdl-core');
 
 //real size of pixel
 const scalef = 1;
@@ -279,7 +293,8 @@ function capitalizeFirstLetter(string) {
 //Send discord embed
 var sendEmbed = async function(channel, message, title, comp){
     return new Promise(async function(resolve, reject) {
-        let richEmbed = new MessageEmbed();
+        // let richEmbed = new MessageEmbed();
+        let richEmbed = getEmbed(message, title, comp);
         richEmbed.setDescription(message);
         richEmbed.setColor(formatedRGB);
         if (title) {
@@ -410,6 +425,15 @@ function timeConvert(time, unit, asString) {
 }
 
 function exitHandler(eventType, a, b, c) {
+    // TODO write this all to file
+
+    // (await client.guilds.fetch('571780425211576330')).channels.cache.get('923750880673677373').send({files: [{
+    // (client.guilds.fetch('571780425211576330')).channels.cache.get('1165348331128627240').send({files: [{
+    // client.channels.cache.get('1165348331128627240').send({files: [{
+    //     attachment: `${userDataPath}`,
+    //     name: 'user_data.json'
+    // }]});
+
     console.log(`exitcode: ${eventType}`);
     console.log(a)
     console.log(b)
@@ -454,9 +478,15 @@ function exitHandler(eventType, a, b, c) {
 }
 
 // `exit`, 
-[`uncaughtException`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `SIGTERM`].forEach((eventType) => {
-    process.on(eventType, exitHandler);
-});
+// console.log(process.argv);
+if (process.argv.includes("-debug")) {
+    console.log("started in debug mode");
+} else {
+    console.log("started in safe mode");
+    [`uncaughtException`, `SIGINT`, `SIGUSR1`, `SIGUSR2`, `SIGTERM`].forEach((eventType) => {
+        process.on(eventType, exitHandler);
+    });
+}
 
 // temp data
 hourData = {}
@@ -500,6 +530,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 });
 
+// TODO is that even true?
 // currently only one server can listen to a user at a time
 client.on('presenceUpdate', async (oldP, newP) => {
     for (var i = 0; i < newP.activities.length;i++) {
@@ -509,10 +540,14 @@ client.on('presenceUpdate', async (oldP, newP) => {
                 if (!musicData.user[newP.userId]) return;
                 
                 const p = newP.activities[i];
+                console.log(`Playing: "${p.details}" by "${p.state}" to ${musicData.user[newP.userId].servers.length} server(s)`);
                 
-                const result = await player.search(`${p.details} by ${p.state} lyrical version`, {
-                    searchEngine: QueryType.YOUTUBE_SEARCH
-                })
+                let result;
+                try {
+                    result = await player.search(`${p.details} by ${p.state} lyrical version`, {
+                        searchEngine: QueryType.YOUTUBE_SEARCH
+                    })
+                } catch(error) {console.error(error)};
 
                 if (result.tracks.length == 0) {
                     console.log("No results");
@@ -521,7 +556,6 @@ client.on('presenceUpdate', async (oldP, newP) => {
                 
                 if (musicData.user[newP.userId].last == result.tracks[0].thumbnail) return;
 
-                console.log(`Playing: "${p.details}" by "${p.state}" to ${musicData.user[newP.userId].servers.length} server(s)`);
                 // 72 drop for funny song
 
                 musicData.user[newP.userId].last = result.tracks[0].thumbnail;
@@ -886,7 +920,7 @@ client.on('messageCreate', (message) => {
 
             message.reply( {embeds: [
                 getEmbed(song_str, 'Queue')
-                  .setThumbnail(cur_song.thumbnail)
+                    .setThumbnail(cur_song.thumbnail)
             ]} );
         }
         else if (args[0] == 'time') {
@@ -906,6 +940,17 @@ client.on('messageCreate', (message) => {
             }
         }
         else if (args[0] == 'lb' || args[0] == 'leaderboard') {
+            const err_f = () => {
+                message.reply("Not enough data to construct a leaderboard.");
+            };
+            if (!userData.hours[message.guild.id]) {
+                userData.hours[message.guild.id] = {};
+                err_f();
+                return;
+            } else if (Object.keys(userData.hours[message.guild.id]) <= 1) {
+                err_f();
+                return;
+            }
             let unordered = userData.hours[message.guild.id];
             console.log(unordered);
             let sorted = Object.keys(unordered).sort((function(valuea, valueb) {
@@ -974,6 +1019,103 @@ client.on('messageCreate', (message) => {
                 const channel = message.guild.channels.fetch(channel_id);
 
                 console.log(channel);
+            }
+            else if (args[0] == 'ytdl') {
+                (async () => {
+                    result = await player.search(`${args.slice(1).join(" ")}`, {
+                        searchEngine: QueryType.AUTO
+                    });
+
+                    const URL = result?.tracks[0]?.url
+
+                    if (!URL) return;
+
+                    const RES = ytdl(URL, YTDL_OPTS);
+                    const INFO = await ytdl.getBasicInfo(URL);
+
+                    // console.log(INFO);
+
+                    RES.pipe(fs.createWriteStream(`downloads/${INFO.player_response.videoDetails.title}.mp4`));
+                    message.reply(path.resolve(`./downloads/${INFO.player_response.videoDetails.title}.mp4`));
+                })();
+            }
+            else if (args[0] == 'backup') {
+                client.channels.cache.get('1165348331128627240').send({files: [{
+                    attachment: `${userDataPath}`,
+                    name: 'user_data.json'
+                }]});
+            } else if (args[0] == 'readcsv') {
+                let santafile = fs.readFileSync(SantaPath, 'utf-8');
+
+                console.log(santafile);
+
+                santafile.split(/\r?\n/).forEach((line, lineCount) => {
+                    if (lineCount == 0) return;
+                    let time,email,name,discord,address;
+                    let TIME_STAMP = 0;let EMAIL = 1;let NAME = 2;let DISCORD = 3;let ADDRESS = 4;
+                    let temp_dat = line.split(',');
+
+                    time = temp_dat[TIME_STAMP];
+                    email = temp_dat[EMAIL];
+                    name = temp_dat[NAME];
+                    discord = temp_dat[DISCORD];
+                    // address = temp_dat[ADDRESS];
+                    address = temp_dat.slice(ADDRESS).join(',');
+
+                    SecretSantaData[discord] = {
+                        "name": name,
+                        "discord": discord,
+                        "address": address
+                    };
+                });
+            } else if (args[0] == 'generate') {
+                // let temp_list = ['negnebulous', 'neeeno'];
+                let temp_list = Object.keys(SecretSantaData);
+                let copy = temp_list.slice();
+
+                let shuffled = [];
+                while (copy.length > 0) {
+                    let idx = Math.floor(Math.random() * copy.length);
+                    shuffled.push(copy[idx]);
+                    copy.splice(idx, 1);
+                }
+
+                console.log(shuffled);
+                SecretSantaPairings = {};
+
+                shuffled.every((ele, idx) => {
+                    if (idx + 1 >= shuffled.length) {
+                        SecretSantaPairings[ele] = shuffled[0];
+                        return true;
+                    }
+                    SecretSantaPairings[ele] = shuffled[idx + 1];
+                    return true;
+                });
+
+                console.log(SecretSantaPairings);
+
+            } else if (args[0] == 'send_santa') {
+                Object.keys(SecretSantaPairings).forEach((key) => {
+                    let user = client.users.cache.find(u => u.username == key);
+
+                    let secret = SecretSantaPairings[key];
+                    if (user) {
+                        user.send(`Your secret person to send gifts to is:\n${SecretSantaData[secret].name}\n\nTheir discord username is:\n${SecretSantaData[secret].discord}\n\nTheir address is:\n${SecretSantaData[secret].address}\n\nGood luck have fun`);
+                    } else {
+                        console.log(`couldn't find user "${key}"`);
+                    }
+                });
+            } else if (args[0] == 'test_send') {
+                Object.keys(SecretSantaPairings).forEach((key) => {
+                    let user = client.users.cache.find(u => u.username == key);
+
+                    let secret = SecretSantaPairings[key];
+                    if (user) {
+                        message.reply(`Your(${user.username}) secret person to send gifts to is:\n${SecretSantaData[secret].name}\n\nTheir discord username is:\n${SecretSantaData[secret].discord}\n\nTheir address is:\n${SecretSantaData[secret].address}\n\nGood luck have fun`);
+                    } else {
+                        console.log(`couldn't find user "${key}"`);
+                    }
+                });
             }
             /*else if (args[0] == 'tweet') {
                 msgsend = 'test';

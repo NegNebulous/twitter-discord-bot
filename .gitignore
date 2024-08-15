@@ -11,3 +11,6 @@ run.bat
 data/.png
 
 package-lock.json
+
+downloads/
+csv/
