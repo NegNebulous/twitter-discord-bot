@@ -38,7 +38,8 @@ const twitterClient = new TwitterApi(`${process.env.TWITTER_BEARER_TOKEN}`);*/
 // https://discord-player.js.org/docs/guides/common-actions#stopping-the-queue
 // https://github.com/Androz2091/discord-player/blob/cd5cf97/packages/discord-player/src/manager/GuildQueue.ts#L608
 const { QueryType, Player, Util } = require("discord-player");
-const {YouTubeExtractor} = require('@discord-player/extractor');
+// const {YouTubeExtractor} = require('@discord-player/extractor');
+const { YoutubeiExtractor  } = require('discord-player-youtubei');
 
 const musicData = {
     user: {},  // data by user, user to servers
@@ -54,7 +55,7 @@ const player = new Player(client, {
     ytdlOptions: YTDL_OPTS
 });
 
-player.extractors.register(YouTubeExtractor, {
+player.extractors.register(YoutubeiExtractor, {
     ytdlOptions: YTDL_OPTS
 });
 
@@ -783,7 +784,7 @@ client.on('messageCreate', (message) => {
             const member = message.guild.members.cache.get(id);
 
             message.reply({embeds: [getEmbed(
-                `Now sharing ${member.user.username}'s music. If you are the host it is recomended that you mute your music player. Once the host begins listening to a new song I will connect and start playing it.`,
+                `Now sharing ${member.user.username}'s music. If you are the host it is recommended that you mute your music player. Once the host begins listening to a new song I will connect and start playing it.`,
                 `Share`
             )]});
         }
