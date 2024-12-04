@@ -41,6 +41,8 @@ const { QueryType, Player, Util } = require("discord-player");
 // const {YouTubeExtractor} = require('@discord-player/extractor');
 const { YoutubeiExtractor  } = require('discord-player-youtubei');
 
+const gamble = require('./gamble');
+
 const musicData = {
     user: {},  // data by user, user to servers
     server: {} // data by server, server to musicPlayer
@@ -939,6 +941,10 @@ client.on('messageCreate', (message) => {
             catch {
                 message.reply(`Targeted user never been in call.`);
             }
+        }
+        else if (args[0] == 'gamble') {
+            gamble.command();
+            // message.reply(`I LOVE GAMBLING!!!! ${1}`);
         }
         else if (args[0] == 'lb' || args[0] == 'leaderboard') {
             const err_f = () => {

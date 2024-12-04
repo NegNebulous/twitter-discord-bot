@@ -59,6 +59,12 @@
       "syntax": "``clear``",
       "desc": "clears the current queue.",
       "example": "``${PREFIX}clear``"
+    },
+    "gamble": {
+      "name": "gamble",
+      "syntax": "``gamble``",
+      "desc": "lets go gambling",
+      "example": "``${PREFIX}gamble``"
     }
   },
 	"adminCommand": {
