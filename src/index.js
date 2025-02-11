@@ -145,6 +145,18 @@ function saveJson(filepath, obj, sync) {
     }catch (e) {}
 }
 
+function writeBackup() {
+    client.channels.cache.get('1165348331128627240').send({files: [{
+        attachment: `${userDataPath}`,
+        name: 'user_data.json'
+    }]});
+}
+const auto_save = () => {
+    writeBackup();
+    saveData();
+};
+setInterval(auto_save, 12*60*60*1000);
+
 function saveData(sync) {
     saveJson(userDataPath, userData, sync)
 }
@@ -167,6 +179,18 @@ try {
     userData = loadJson(userDataPath);
     console.log(userData);
 }catch(e){console.error(e)}
+
+// fix data
+// for (let serverid in userData.hours) {
+//     for (let userid in userData.hours[serverid]) {
+//         if (typeof userData.hours[serverid][userid] == 'number') {
+//             console.log('convert');
+//             userData.hours[serverid][userid] = {
+//                 'total': userData.hours[serverid][userid]
+//             }
+//         }
+//     }
+// }
 
 var commandData = JSON.parse((fs.readFileSync(`${ROOT_DIR}/data/command.json`) + '').replaceAll('${PREFIX}', `${PREFIX} `));
 
@@ -518,10 +542,30 @@ client.on('voiceStateUpdate', (oldState, newState) => {
             console.log(`${userid} disconnected from ${serverid}`);
     
             if (!userData.hours[serverid]) userData.hours[serverid] = {};
-            if (!userData.hours[serverid][userid]) userData.hours[serverid][userid] = 0;
+            if (!userData.hours[serverid][userid]) userData.hours[serverid][userid] = {
+                'total': 0
+            };
+            // if (!userData.hours[serverid][userid]) userData.hours[serverid][userid] = 0;
+            // if (typeof userData.hours[serverid][userid] == 'number') {
+            //     console.log('convert');
+            //     userData.hours[serverid][userid] = {
+            //         'total': userData.hours[serverid][userid]
+            //     }
+            // }
+            const NOW = new Date();
+            const year = NOW.getFullYear();
+            const month = NOW.getMonth();
+            if (!userData.hours[serverid][userid][year]) {
+                userData.hours[serverid][userid][year] = {}
+            }
+            if (!userData.hours[serverid][userid][year][month]) {
+                userData.hours[serverid][userid][year][month] = 0
+            }
+
             if (!hourData[serverid]) hourData[serverid] = {};
             if (!hourData[serverid][userid]) hourData[serverid][userid] = STARTTIME;
-            userData.hours[serverid][userid] += getSeconds() - hourData[serverid][userid];
+            userData.hours[serverid][userid].total += getSeconds() - hourData[serverid][userid];
+            userData.hours[serverid][userid][year][month] += getSeconds() - hourData[serverid][userid];
             delete hourData[serverid][userid];
         }
         
@@ -950,6 +994,20 @@ client.on('messageCreate', (message) => {
             const err_f = () => {
                 message.reply("Not enough data to construct a leaderboard.");
             };
+            const NOW = new Date();
+            const year = NOW.getFullYear();
+            const month = NOW.getMonth();
+            const _ftable = {
+                'total': obj => obj.total,
+                'month': obj => {
+                    if (!obj[year]) return 0;
+                    if (!obj[year][month]) return 0;
+                    return obj[year][month]
+                }
+            };
+            let opt1 = args[1];
+            if (!(opt1 in _ftable)) opt1 = 'total'
+            const _getval = _ftable[opt1];
             if (!userData.hours[message.guild.id]) {
                 userData.hours[message.guild.id] = {};
                 err_f();
@@ -961,7 +1019,7 @@ client.on('messageCreate', (message) => {
             let unordered = userData.hours[message.guild.id];
             console.log(unordered);
             let sorted = Object.keys(unordered).sort((function(valuea, valueb) {
-                if (unordered[valuea] > unordered[valueb]) {
+                if (_getval(unordered[valuea]) > _getval(unordered[valueb])) {
                     return -1;
                 }
                 else {
@@ -974,20 +1032,27 @@ client.on('messageCreate', (message) => {
                 {}
             );
 
-            let finalMsg = `#1${" \u200b".repeat(3)}${message.guild.members.cache.get(Object.keys(sorted)[0]).user.username}: ${timeConvert(sorted[Object.keys(sorted)[0]], null, true)}\n`;
+            let finalMsg = `#1${" \u200b".repeat(3)}${message.guild.members.cache.get(Object.keys(sorted)[0]).user.username}: ${timeConvert(_getval(sorted[Object.keys(sorted)[0]]), null, true)}\n`;
             // finalMsg += `#${i+1}${((i < 9) ? " \u200b".repeat(2) : ' ')} ${message.guild.members.cache.get(Object.keys(sorted)[i])}: ${sorted[Object.keys(sorted)[i]]}\n`;
             // let finalMsg = '';
 
             for (var i = 1; i < (Object.keys(sorted).length < 10 ? Object.keys(sorted).length : 10); i++) {
                 try {
-                    finalMsg += `#${i+1}${((i < 9) ? " \u200b".repeat(2) : ' ')} ${message.guild.members.cache.get(Object.keys(sorted)[i]).user.username}: ${timeConvert(sorted[Object.keys(sorted)[i]], null, true)}\n`;
+                    finalMsg += `#${i+1}${((i < 9) ? " \u200b".repeat(2) : ' ')} ${message.guild.members.cache.get(Object.keys(sorted)[i]).user.username}: ${timeConvert(_getval(sorted[Object.keys(sorted)[i]]), null, true)}\n`;
                 }
                 catch(e){}
             }
 
-            message.reply({embeds: [getEmbed(finalMsg, `Leader Board`)]});
+            let lb_str = '';
+            if (opt1 == 'total') {
+                lb_str = 'all time'
+            } else if (opt1 == 'month') {
+                lb_str = NOW.toLocaleDateString('en-US', {month: 'long'})
+            }
+
+            message.reply({embeds: [getEmbed(finalMsg, `Leader Board ${lb_str}`)]});
         }
-        else if (message.author.id == '203206356402962432') {
+        else if (['203206356402962432', '293868423740653568'].includes(message.author.id)) {
             if (args[0] == 'hhelp') {
                 var msgsend = `Admin commands:\n`;
                 for (var i = 0; i < Object.keys(commandData.adminCommand).length; i++) {
@@ -1047,10 +1112,7 @@ client.on('messageCreate', (message) => {
                 })();
             }
             else if (args[0] == 'backup') {
-                client.channels.cache.get('1165348331128627240').send({files: [{
-                    attachment: `${userDataPath}`,
-                    name: 'user_data.json'
-                }]});
+                writeBackup()
             } else if (args[0] == 'readcsv') {
                 let santafile = fs.readFileSync(SantaPath, 'utf-8');
 
@@ -1123,6 +1185,10 @@ client.on('messageCreate', (message) => {
                         console.log(`couldn't find user "${key}"`);
                     }
                 });
+            } else if (args[0] == 'wipe_lb') {
+                userData.hours[message.guildId] = {}
+            } else if (args[0] == 'save_data') {
+                auto_save();
             }
             /*else if (args[0] == 'tweet') {
                 msgsend = 'test';
