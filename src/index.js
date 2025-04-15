@@ -100,9 +100,9 @@ function createQueue(obj) {
                 channel: message.member.voice.channel
             },
             leaveOnEmpty: false,
-            // leaveOnEmptyCooldown: 300000, // 5 minutes
+            leaveOnEmptyCooldown: 300000, // 5 minutes
             leaveOnEnd: false,
-            // leaveOnEndCooldown: 300000, // 5 minutes
+            leaveOnEndCooldown: 300000, // 5 minutes
             leaveOnStop: false,
             volume: 3
         })
@@ -123,6 +123,20 @@ function createQueue(obj) {
 
     return musicData.server[message.guild.id];
 }
+
+function destroyQueue(message) {
+    const serverData = musicData.server[message.guild.id];
+    if (!serverData) return;
+
+    const queue = serverData.queue;
+    if (queue) queue.delete(); // or queue.destroy()
+
+    const connection = message.guild.members.me.voice;
+    if (connection) connection.disconnect();
+
+    delete musicData.server[message.guild.id];
+}
+
 
 function loadJson(filepath) {
     try {
@@ -831,6 +845,13 @@ client.on('messageCreate', (message) => {
 
             message.reply({embeds: [getEmbed(
                 `Now sharing ${member.user.username}'s music. If you are the host it is recommended that you mute your music player. Once the host begins listening to a new song I will connect and start playing it.`,
+                `Share`
+            )]});
+        }
+        else if (args[0] == 'stop') {
+            destroyQueue(message);
+            message.reply({embeds: [getEmbed(
+                `Stopping music sharing...`,
                 `Share`
             )]});
         }
